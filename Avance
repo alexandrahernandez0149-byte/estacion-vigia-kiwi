@@ -1,0 +1,240 @@
+void buscarEventoPorTipo(const NodoEvento *cabeza) {
+    char tipoBuscado[24];
+    int encontrados = 0;
+
+    if (cabeza == NULL) {
+        printf("No hay eventos registrados para buscar.\n");
+        return;
+    }
+    if (!leerCadena("Tipo de evento (ej. UMBRAL SUPERADO): ",
+                    tipoBuscado, sizeof(tipoBuscado))) {
+        printf("Tipo no valido.\n");
+        return;
+    }
+
+    printf("\n--- RESULTADOS DE BUSQUEDA ---\n");
+    while (cabeza != NULL) {
+        if (strcmp(cabeza->tipo, tipoBuscado) == 0) {
+            printf("ID: %d | Tipo: %s | Lectura: %.2f\n",
+                   cabeza->id, cabeza->tipo, cabeza->valor);
+            encontrados++;
+        }
+        cabeza = cabeza->siguiente;
+    }
+    if (encontrados == 0) {
+        printf("No se encontraron eventos de ese tipo.\n");
+    }
+}
+
+void eliminarEvento(NodoEvento **cabeza) {
+    int id;
+    NodoEvento *actual = *cabeza;
+    NodoEvento *anterior = NULL;
+
+    if (actual == NULL) {
+        printf("No hay eventos para eliminar.\n");
+        return;
+    }
+    if (!leerEntero("ID del evento que deseas eliminar: ", &id)) {
+        printf("ID no valido.\n");
+        return;
+    }
+
+    while (actual != NULL && actual->id != id) {
+        anterior = actual;
+        actual = actual->siguiente;
+    }
+    if (actual == NULL) {
+        printf("No se encontro ese ID.\n");
+        return;
+    }
+
+    if (anterior == NULL) {
+        *cabeza = actual->siguiente;
+    } else {
+        anterior->siguiente = actual->siguiente;
+    }
+    free(actual);
+    printf("Evento %d eliminado correctamente.\n", id);
+}
+
+void enviarComando(ColaComandos *cola) {
+    int opcion;
+    const char *texto;
+    NodoComando *nuevo;
+
+    printf("\n--- ENVIAR COMANDO ---\n");
+    printf("1. ENCENDER\n2. APAGAR\n3. DETENER\n");
+    if (!leerEntero("Selecciona el comando: ", &opcion)) {
+        printf("Opcion no valida.\n");
+        return;
+    }
+    switch (opcion) {
+        case 1: texto = "ENCENDER"; break;
+        case 2: texto = "APAGAR"; break;
+        case 3: texto = "DETENER"; break;
+        default:
+            printf("Comando no reconocido.\n");
+            return;
+    }
+
+    nuevo = (NodoComando *)malloc(sizeof(NodoComando));
+    if (nuevo == NULL) {
+        printf("No hay memoria disponible para agregar el comando.\n");
+        return;
+    }
+    snprintf(nuevo->comando, sizeof(nuevo->comando), "%s", texto);
+    nuevo->siguiente = NULL;
+
+    if (cola->final == NULL) {
+        cola->frente = nuevo;
+    } else {
+        cola->final->siguiente = nuevo;
+    }
+    cola->final = nuevo;
+    printf("Comando %s agregado a la cola FIFO.\n", texto);
+}
+
+void ejecutarComandos(ColaComandos *cola, NodoHistorial **pila,
+                      char estadoActuador[TAM_ESTADO]) {
+    int ejecutados = 0;
+    while (cola->frente != NULL) {
+        NodoComando *comando = cola->frente;
+        NodoHistorial *registro = (NodoHistorial *)malloc(sizeof(NodoHistorial));
+        char nuevoEstado[TAM_ESTADO];
+
+        if (registro == NULL) {
+            printf("Memoria insuficiente. Quedan comandos pendientes en la cola.\n");
+            return;
+        }
+
+        if (strcmp(comando->comando, "ENCENDER") == 0) {
+            strcpy(nuevoEstado, "ENCENDIDO");
+        } else if (strcmp(comando->comando, "APAGAR") == 0) {
+            strcpy(nuevoEstado, "APAGADO");
+        } else {
+            strcpy(nuevoEstado, "DETENIDO");
+        }
+
+        snprintf(registro->comando, sizeof(registro->comando), "%s", comando->comando);
+        snprintf(registro->estadoAnterior, sizeof(registro->estadoAnterior), "%s", estadoActuador);
+        snprintf(registro->estadoNuevo, sizeof(registro->estadoNuevo), "%s", nuevoEstado);
+        registro->siguiente = *pila;
+        *pila = registro;
+
+        strcpy(estadoActuador, nuevoEstado);
+        cola->frente = comando->siguiente;
+        if (cola->frente == NULL) cola->final = NULL;
+
+        printf("Comando ejecutado: %s | Estado actual: %s\n",
+               comando->comando, estadoActuador);
+        free(comando);
+        ejecutados++;
+    }
+
+    if (ejecutados == 0) {
+        printf("No hay comandos pendientes en la cola.\n");
+    } else {
+        printf("Se ejecutaron %d comando(s) en orden FIFO.\n", ejecutados);
+    }
+}
+
+void deshacerUltimoComando(NodoHistorial **pila,
+                           char estadoActuador[TAM_ESTADO]) {
+    NodoHistorial *ultimo;
+    if (*pila == NULL) {
+        printf("No hay comandos en el historial para deshacer.\n");
+        return;
+    }
+
+    ultimo = *pila;
+    strcpy(estadoActuador, ultimo->estadoAnterior);
+    printf("Se deshizo %s. Estado restaurado: %s\n",
+           ultimo->comando, estadoActuador);
+    *pila = ultimo->siguiente;
+    free(ultimo);
+}
+
+void mostrarEstadoActuador(const char estadoActuador[TAM_ESTADO]) {
+    printf("Estado simulado del actuador: %s\n", estadoActuador);
+}
+
+void vaciarCola(ColaComandos *cola) {
+    NodoComando *actual = cola->frente;
+    while (actual != NULL) {
+        NodoComando *siguiente = actual->siguiente;
+        free(actual);
+        actual = siguiente;
+    }
+    cola->frente = NULL;
+    cola->final = NULL;
+}
+
+void vaciarEventos(NodoEvento **cabeza) {
+    NodoEvento *actual = *cabeza;
+    while (actual != NULL) {
+        NodoEvento *siguiente = actual->siguiente;
+        free(actual);
+        actual = siguiente;
+    }
+    *cabeza = NULL;
+}
+
+void vaciarPila(NodoHistorial **pila) {
+    NodoHistorial *actual = *pila;
+    while (actual != NULL) {
+        NodoHistorial *siguiente = actual->siguiente;
+        free(actual);
+        actual = siguiente;
+    }
+    *pila = NULL;
+}
+
+void liberarTodaMemoria(EstacionVigia *estacion, NodoEvento **eventos,
+                        ColaComandos *cola, NodoHistorial **pila) {
+    free(estacion->lecturas);
+    estacion->lecturas = NULL;
+    estacion->capacidad = 0;
+    estacion->cantidad = 0;
+    vaciarEventos(eventos);
+    vaciarCola(cola);
+    vaciarPila(pila);
+}
+
+int leerEntero(const char *mensaje, int *valor) {
+    int resultado;
+    printf("%s", mensaje);
+    resultado = scanf("%d", valor);
+    limpiarRestoLinea();
+    return resultado == 1;
+}
+
+int leerFlotante(const char *mensaje, float *valor) {
+    int resultado;
+    printf("%s", mensaje);
+    resultado = scanf("%f", valor);
+    limpiarRestoLinea();
+    return resultado == 1;
+}
+
+void limpiarRestoLinea(void) {
+    int caracter;
+    while ((caracter = getchar()) != '\n' && caracter != EOF) {
+        /* Descarta caracteres sobrantes de la linea de entrada. */
+    }
+}
+
+int leerCadena(const char *mensaje, char *destino, size_t capacidad) {
+    size_t longitud;
+    printf("%s", mensaje);
+    if (fgets(destino, (int)capacidad, stdin) == NULL) {
+        return 0;
+    }
+    longitud = strlen(destino);
+    if (longitud > 0 && destino[longitud - 1] == '\n') {
+        destino[longitud - 1] = '\0';
+    } else {
+        limpiarRestoLinea();
+    }
+    return destino[0] != '\0';
+}
